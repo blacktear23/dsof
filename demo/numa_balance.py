@@ -75,6 +75,7 @@ class Planner(object):
         self.iters = 0
         self.metrics = []
         self.first_best_found_iter = 0
+        self.current_rule_prun = 0
 
     def prune_ratio(self):
         gens = self.generates
@@ -100,9 +101,9 @@ class Planner(object):
 
     def score(self, state: State):
         return (
-            self.cpu_imbalance(state),
-            state.moved_mem,
-            self.mem_imbalance(state),
+            self.cpu_imbalance(state),  # Target
+            self.mem_imbalance(state),  # Target
+            state.moved_mem,            # Cost
         )
 
     def is_complete(self, state: State):
@@ -134,6 +135,7 @@ class Planner(object):
                 for dst in state.socket_cpu.keys():
                     self.generates += 1
                     if vm.name in state.touched_vm:
+                        self.current_rule_prun += 1
                         self.propose_prun_assign += 1
                         continue
                         
@@ -142,11 +144,13 @@ class Planner(object):
                             Assign(vm.name, vm, dst)
                         )
                     else:
+                        self.current_rule_prun += 1
                         self.propose_prun_assign += 1
             elif complete:
                 for dst in state.socket_cpu.keys():
                     self.generates += 1
                     if vm.name in state.touched_vm:
+                        self.current_rule_prun += 1
                         self.propose_prun_move += 1
                         continue
 
@@ -156,8 +160,10 @@ class Planner(object):
                                 Move(vm.name, vm, loc, dst)
                             )
                         else:
+                            self.current_rule_prun += 1
                             self.propose_prun_move += 1
                     else:
+                        self.current_rule_prun += 1
                         self.propose_prun_move += 1
         return ops
 
@@ -223,6 +229,7 @@ class Planner(object):
 
             frontier_b = frontier[:]
             memo_prune = 0
+            self.current_rule_prun = 0
             for op in self.propose(state):
                 new_state = self.apply(state, op)
                 key = new_state.key()
@@ -248,7 +255,7 @@ class Planner(object):
                 frontier_b = heapq.nsmallest(len(frontier_b), frontier_b)
                 djs = js_divergence(frontier_a, frontier_b)
                 jaccard = jaccard_simi(frontier_a, frontier_b)
-                # print(f"Iter {self.iters} JS Divergence Beam = {beam_width}, Memo Prune = {memo_prune}, Found = {found}, Frontier = {len(frontier)} With Memo vs Without Memo:", djs, jaccard)
+                # print(f"Iter {self.iters} JS Divergence Beam = {beam_width}, Memo Prune = {memo_prune + self.current_rule_prun}, Found = {found}, Frontier = {len(frontier)} With Memo vs Without Memo:", djs, jaccard)
                 self.metrics.append((self.iters, memo_prune, djs, jaccard))
                 frontier = heapq.nsmallest(beam_width, frontier)
                 heapq.heapify(frontier)
@@ -453,19 +460,19 @@ def test():
     print(len(best.history))
 
     state = build_state_from_vms(vms2, {0: 512, 1: 512})
-    planner = Planner(vms2)
-    best = planner.solve(state)
-    vms2_pr = planner.prune_ratios()
+    planner2 = Planner(vms2)
+    best = planner2.solve(state)
+    vms2_pr = planner2.prune_ratios()
     print("VMs:", best.socket_vms)
     print("CPU:", best.socket_cpu)
     print("MEM:", best.socket_mem)
     print("Moved:", best.moved_mem)
 
-    print("Generates:     ", planner.generates)
-    print("Propose Prune: ", "Assign: ", planner.propose_prun_assign, "Move: ", planner.propose_prun_move)
-    print("Memo Prune:    ", planner.memo_prun)
-    print("Beam Prune:    ", planner.beam_prun)
-    print("Prune Ratio:   ", planner.prune_ratio())
+    print("Generates:     ", planner2.generates)
+    print("Propose Prune: ", "Assign: ", planner.propose_prun_assign, "Move: ", planner2.propose_prun_move)
+    print("Memo Prune:    ", planner2.memo_prun)
+    print("Beam Prune:    ", planner2.beam_prun)
+    print("Prune Ratio:   ", planner2.prune_ratio())
     print()
     for op in sorted(best.history, key=lambda x: x.vm_name):
         print(op)
@@ -475,7 +482,7 @@ def test():
     print(vms1_e, vms1_pr)
     print(vms2_e, vms2_pr)
 
-    # draw_plot(planner.metrics, planner.first_best_found_iter)
+    draw_plot(planner.metrics, planner.first_best_found_iter)
 
     
 def draw_plot(data, first_best_iter):
@@ -487,18 +494,18 @@ def draw_plot(data, first_best_iter):
     d_js = []
     for (i, p, djs, jaccard) in data:
         iters.append(i)
-        prunes.append(djs)
+        prunes.append(p)
         d_js.append(djs)
         jaccards.append(jaccard)
 
     plt.figure(figsize=(12, 6), dpi=120)
-    scatter = plt.scatter(jaccards, d_js, c=prunes, s=15,
+    scatter = plt.scatter(d_js, jaccards, c=prunes, s=15,
                           cmap='turbo', alpha=0.6, edgecolors='none')
     cbar = plt.colorbar(scatter)
     cbar.set_label('Prunes', fontsize=11)
 
-    plt.xlabel('Jaccard')
-    plt.ylabel('Djs')
+    plt.xlabel('Djs')
+    plt.ylabel('Jaccard')
     plt.title('Search Dynamics: Jaccard x JS Divergence')
 
     # 刻度精细化：重点展示 0 ~ 0.1 之间的细密变化

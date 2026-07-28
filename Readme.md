@@ -80,6 +80,8 @@ while True:
 
 在离散状态空间优化框架中，Candidate 与 State 明确分离，Candidate 本身不是 State，而是状态转移函数的输入。State.Apply(Candidate) 是整个框架唯一允许修改 State 的位置。
 
+在 Frontier 中，如何对下一步搜索进行决策是很重要的一个课题。假设当 Frontier 通过一个 Score 函数来对内部的 States 进行排序时，尽量遵从先对比与目标的距离，后对比到目标的花费。如果 Frontier 的决策逻辑设计不好，会导致搜索域的不稳，从而导致不同 Prune Ratio 情况下结果不稳定。
+
 ## Decision Entropy
 
 在离散状态空间优化框架中，决策熵（Decision Entropy） 用于度量当前搜索状态下决策的不确定性（Decision Uncertainty），而不是问题规模本身。这里引入 Entropy 这个概念是因为在离散搜索中，单纯依赖耗时（Latency）和吞吐量（Throughput）来评测优化器会导致严重的“性能幻觉（Performance Illusion）”。因为没有 Entropy 这个度量，我们不清楚算法慢是算法问题还是搜索空间太大的问题。而引入了 Entropy 之后，输入的状态与状态之间是可以进行判别的。
