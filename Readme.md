@@ -11,7 +11,9 @@
                       │
                       ▼
            1. Candidate Generation
-                      │
+                      |
+                      │ <------ Candidate Ordering
+                      |
                       ▼
           2. Rule Prune (Static Gate)
                       │
@@ -40,14 +42,14 @@ frontier.Push(initial_state)
 
 while True:
 	state = frontier.Pop()
-	
+
 	if Goal(state):
 		if Better(state, best)
 			best = state
-			
+
 		if CanExit(state, best):
 			return best
-	
+
 	for candidate in Propose(state):
         if prules.Match(candidate):
             continue
@@ -55,10 +57,10 @@ while True:
 		new_state = state.Apply(candidate)
 		if memo.Hit(new_state):
 			continue
-		
-		memo.Update(new_state)		
+
+		memo.Update(new_state)
 		frontier.Push(new_state)
-		
+
 	frontier.Prune(frules)
 ```
 
@@ -81,6 +83,8 @@ while True:
 在离散状态空间优化框架中，Candidate 与 State 明确分离，Candidate 本身不是 State，而是状态转移函数的输入。State.Apply(Candidate) 是整个框架唯一允许修改 State 的位置。
 
 在 Frontier 中，如何对下一步搜索进行决策是很重要的一个课题。假设当 Frontier 通过一个 Score 函数来对内部的 States 进行排序时，尽量遵从先对比与目标的距离，后对比到目标的花费。如果 Frontier 的决策逻辑设计不好，会导致搜索域的不稳，从而导致不同 Prune Ratio 情况下结果不稳定。
+
+这里要着重介绍一下 Candidate Ordering。一个好的 Ordering 会引导搜索树的构造形态。如果配上 Beam 的话，搜索树的构造形态甚至决定了最终结果的好坏。而 Candidate Ordering 在 Propose 操作中需要被定义。
 
 ## Decision Entropy
 
@@ -133,11 +137,11 @@ while True:
 ```python
 while True:
 	state = frontier.Pop()
-	
+
 	if Goal(state):
 		if Better(state, best)
 			best = state
-			
+
 		if CanExit(state, best):
 			return best
 
@@ -153,11 +157,11 @@ while True:
 		new_state = state.Apply(candidate)
 		if memo.Hit(new_state):
 			continue
-		
-		memo.Update(new_state)		
+
+		memo.Update(new_state)
 		frontier.Push(new_state)
         frontier_b.Push(new_state)
-		
+
 	frontier.Prune(frules)
     jaccard = jaccard_divergence(frontier_a, frontier_b)
     js_d = js_divergence(frontier_a, frontier_b)
